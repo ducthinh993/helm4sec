@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "wazuh.fullname" . }}
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  serviceName: wazuh-{{ .Values.roles }}
+  selector:
+    matchLabels:
+      {{- include "wazuh.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wazuh.selectorLabels" . | nindent 8 }}
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: wazuh-{{ .Values.roles }}-conf
+        - name: local-options
+          configMap:
+            name: wazuh-{{ .Values.roles }}-conf
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "wazuh.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ELASTICSEARCH_URL
+              value: "{{ .Values.elasticsearchURL }}"
+          ports:
+            - containerPort: 1514
+              name: agent
+              protocol: UDP
+            - containerPort: 1515
+              name: registration
+            - containerPort: 1516
+              name: cluster
+            - containerPort: 55000
+              name: api
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              subPath: ossec.conf
+              readOnly: true
+            - name: local-options
+              mountPath: /wazuh-config-mount/etc/local_internal_options.conf
+              subPath: local_internal_options.conf
+              readOnly: true
+            - name: {{ template "wazuh.fullname" . }}
+              mountPath: /var/ossec/data
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ template "wazuh.fullname" . }}
+        namespace: {{.Release.Namespace}}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50Gi

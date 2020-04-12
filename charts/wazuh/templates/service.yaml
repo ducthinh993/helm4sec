@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wazuh.fullname" . }}
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - name: api
+    # nodePort: 32110
+    port: 55000
+    protocol: TCP
+    targetPort: api
+  - name: registration
+    # nodePort: 32111
+    port: 1515
+    protocol: TCP
+    targetPort: registration
+  - name: secure
+    # nodePort: 32112
+    port: 1514
+    protocol: TCP
+    targetPort: 1514
+  selector:
+    {{- include "wazuh.selectorLabels" . | nindent 4 }}

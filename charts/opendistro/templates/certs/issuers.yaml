@@ -1,0 +1,18 @@
+{{ if .Values.certmanager.enabled }}
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+{{ end }}
+---
+{{ if .Values.certmanager.enabled }}
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: {{ .Values.certmanager.certPrefix }}-ca-issuer
+spec:
+  ca:
+    secretName: {{ .Values.certmanager.certPrefix }}-ca-cert
+{{ end }}

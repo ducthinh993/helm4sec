@@ -1,0 +1,70 @@
+{{ if .Values.certmanager.enabled }}
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: {{ .Values.certmanager.certPrefix }}-ca-certificate
+spec:
+  secretName: {{ .Values.certmanager.certPrefix }}-ca-cert
+  duration: {{ .Values.certmanager.duration }}
+  renewBefore: {{ .Values.certmanager.renewBefore }}
+  commonName: Opendistro Root CA
+  isCA: true
+  keySize: {{ .Values.certmanager.keySize }}
+  usages:
+    - digital signature
+    - key encipherment
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+{{ end }}
+---
+{{ if .Values.certmanager.enabled }}
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: opendistro-server
+spec:
+  secretName: opendistro-server-cert
+  duration: {{ .Values.certmanager.duration }}
+  renewBefore: {{ .Values.certmanager.renewBefore }}
+  isCA: false
+  keySize: {{ .Values.certmanager.keySize }}
+  keyAlgorithm: {{ .Values.certmanager.keyAlgorithm }}
+  keyEncoding: pkcs8
+  usages:
+  - server auth
+  - client auth
+  commonName: Opendistro Admin Certificate
+  issuerRef:
+    name: {{ .Values.certmanager.certPrefix }}-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+{{ end }}
+---
+{{ if .Values.certmanager.enabled }}
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: opendistro-client
+spec:
+  secretName: opendistro-client-cert
+  duration: {{ .Values.certmanager.duration }}
+  renewBefore: {{ .Values.certmanager.renewBefore }}
+  keySize: {{ .Values.certmanager.keySize }}
+  keyAlgorithm: {{ .Values.certmanager.keyAlgorithm }}
+  keyEncoding: pkcs8
+  usages:
+  - server auth
+  - client auth
+  commonName: Opendistro Node And Client Certificate
+  dnsNames:
+  {{- if .Values.elasticsearch.client.enabled }}
+  - {{ template "opendistro-es.fullname" . }}-client-service.{{ .Release.Namespace }}.svc.cluster.local
+  {{ end }}
+  - {{ template "opendistro-es.fullname" . }}-discovery.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ .Values.certmanager.certPrefix }}-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+{{ end }}

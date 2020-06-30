@@ -20,6 +20,35 @@ certmanager:
   keyAlgorithm: rsa
   keystoresPassword: dd501043eb79e63c9f832129fe6119a3
 
+kafka:
+  enabled: true
+  cluster: opendistro
+  authentication:
+    type: scram-sha-512
+    username: kafka-logger
+    passwordSecret:
+      secretName: kafka-logger-credentials
+      password: production
+  topics:
+  - name: json.cxa-secops.k8s
+    replicas: 2
+    partitions: 10
+    config:
+      retention.ms: 7200000
+      segment.bytes: 1073741824
+  - name: son.cxa-secops.k8s.stdout
+    replicas: 2
+    partitions: 10
+    config:
+      retention.ms: 7200000
+      segment.bytes: 1073741824
+  - name: son.cxa-secops.k8s.stderr
+    replicas: 2
+    partitions: 10
+    config:
+      retention.ms: 7200000
+      segment.bytes: 1073741824
+
 kibana:
   enabled: true
   image: amazon/opendistro-for-elasticsearch-kibana
@@ -55,7 +84,7 @@ kibana:
       existingCertSecretKeySubPath: tls.key
       existingCertSecretRootCASubPath: ca.crt
     elasticsearch:
-      enabled: true
+      enabled: false
       existingCertSecret: opendistro-server-cert
       existingCertSecretCertSubPath: tls.crt
       existingCertSecretKeySubPath: tls.key
@@ -75,11 +104,11 @@ kibana:
     labels: {}
     path: /
     hosts:
-      - logging.cxa.secops.pw
+      - logging-dev.cxa.secops.pw
     tls:
      - secretName: logging-kibana-tls
        hosts:
-         - logging.cxa.secops.pw
+         - logging-dev.cxa.secops.pw
 
   service:
     type: ClusterIP
@@ -94,15 +123,15 @@ kibana:
     # logging.quiet: true
     # logging.silent: true
     ## Replace with Elasticsearch DNS name picked during Service deployment
-    elasticsearch.hosts: https://opendistro-opendistro-es-client-service.opensoc.svc.cluster.local:9200
+    elasticsearch.hosts: http://opendistro-opendistro-es-client-service.opensoc.svc.cluster.local:9200
     elasticsearch.requestTimeout: 360000
     elasticsearch.username: kibanaserver
     elasticsearch.password: kibanaserver
     opendistro_security.allow_client_certificates: true
-    elasticsearch.ssl.verificationMode: certificate
-    elasticsearch.ssl.certificate: /usr/share/kibana/certs/elk-rest-crt.pem
-    elasticsearch.ssl.key: /usr/share/kibana/certs/elk-rest-key.pem
-    elasticsearch.ssl.certificateAuthorities: /usr/share/kibana/certs/elk-rest-root-ca.pem
+    # elasticsearch.ssl.verificationMode: certificate
+    # elasticsearch.ssl.certificate: /usr/share/kibana/certs/elk-rest-crt.pem
+    # elasticsearch.ssl.key: /usr/share/kibana/certs/elk-rest-key.pem
+    # elasticsearch.ssl.certificateAuthorities: /usr/share/kibana/certs/elk-rest-root-ca.pem
     ## Kibana TLS Config
     server.ssl.enabled: false
     # server.ssl.key: /usr/share/kibana/certs/kibana-key.pem
@@ -163,13 +192,250 @@ elasticsearch:
     #The following option simplifies securityConfig by using a single secret and specifying the respective secrets in the corresponding files instead of creating different secrets for config,internal users, roles, roles mapping and tenants
     #Note that this is an alternative to the above secrets and shouldn't be used if the above secrets are used
     config:
-       securityConfigSecret:
-       data: {}
-        # config.yml: |-
-        # internal_users.yml: |-
-        # roles.yml: |-
-        # rolesMapping.yml: |-
-        # tenants.yml: |-
+       securityConfigSecret: opendistro-security-config
+       data:
+        config.yml: |-
+            _meta:
+              type: "config"
+              config_version: 2
+
+            config:
+              dynamic:
+                http:
+                  anonymous_auth_enabled: true
+                  xff:
+                    enabled: false
+                authc:
+                  kerberos_auth_domain:
+                    http_enabled: false
+                    transport_enabled: false
+                    order: 6
+                    http_authenticator:
+                      type: kerberos
+                      challenge: true
+                      config:
+                        krb_debug: false
+                        strip_realm_from_principal: true
+                    authentication_backend:
+                      type: noop
+                  basic_internal_auth_domain:
+                    description: "Authenticate via HTTP Basic against internal users database"
+                    http_enabled: true
+                    transport_enabled: true
+                    order: 4
+                    http_authenticator:
+                      type: basic
+                      challenge: true
+                    authentication_backend:
+                      type: intern
+                  proxy_auth_domain:
+                    description: "Authenticate via proxy"
+                    http_enabled: false
+                    transport_enabled: false
+                    order: 3
+                    http_authenticator:
+                      type: proxy
+                      challenge: false
+                      config:
+                        user_header: "x-proxy-user"
+                        roles_header: "x-proxy-roles"
+                    authentication_backend:
+                      type: noop
+                  jwt_auth_domain:
+                    description: "Authenticate via Json Web Token"
+                    http_enabled: false
+                    transport_enabled: false
+                    order: 0
+                    http_authenticator:
+                      type: jwt
+                      challenge: false
+                      config:
+                        signing_key: "base64 encoded HMAC key or public RSA/ECDSA pem key"
+                        jwt_header: "Authorization"
+                        jwt_url_parameter: null
+                        roles_key: null
+                        subject_key: null
+                    authentication_backend:
+                      type: noop
+                  clientcert_auth_domain:
+                    description: "Authenticate via SSL client certificates"
+                    http_enabled: false
+                    transport_enabled: false
+                    order: 2
+                    http_authenticator:
+                      type: clientcert
+                      config:
+                      challenge: false
+                    authentication_backend:
+                      type: noop
+                  ldap:
+                    description: "Authenticate via LDAP or Active Directory"
+                    http_enabled: false
+                    transport_enabled: false
+                    order: 5
+                    http_authenticator:
+                      type: basic
+                      challenge: false
+                    authentication_backend:
+                      type: ldap
+                      config:
+                        enable_ssl: false
+                        enable_start_tls: false
+                        enable_ssl_client_auth: false
+                        verify_hostnames: true
+                        hosts:
+                        - localhost:8389
+                        bind_dn: null
+                        password: null
+                        userbase: 'ou=people,dc=example,dc=com'
+                        usersearch: '(sAMAccountName={0})'
+                        username_attribute: null
+                authz:
+                  roles_from_myldap:
+                    description: "Authorize via LDAP or Active Directory"
+                    http_enabled: false
+                    transport_enabled: false
+                    authorization_backend:
+                      type: ldap
+                      config:
+                        enable_ssl: false
+                        enable_start_tls: false
+                        enable_ssl_client_auth: false
+                        verify_hostnames: true
+                        hosts:
+                        - localhost:8389
+                        bind_dn: null
+                        password: null
+                        rolebase: 'ou=groups,dc=example,dc=com'
+                        rolesearch: '(member={0})'
+                        userroleattribute: null
+                        userrolename: disabled
+                        rolename: cn
+                        resolve_nested_roles: true
+                        userbase: 'ou=people,dc=example,dc=com'
+                        usersearch: '(uid={0})'
+                  roles_from_another_ldap:
+                    description: "Authorize via another Active Directory"
+                    http_enabled: false
+                    transport_enabled: false
+                    authorization_backend:
+                      type: ldap
+        internal_users.yml: |-
+          _meta:
+            type: "internalusers"
+            config_version: 2
+          admin:
+            hash: "$2a$12$VcCDgh2NDk07JGN0rjGbM.Ad41qVR/YFJcgHp0UGns5JDymv..TOG"
+            reserved: true
+            backend_roles:
+            - "admin"
+            description: "Demo admin user"
+          kibanaserver:
+            hash: "$2a$12$4AcgAt3xwOWadA5s5blL6ev39OXDNhmOesEoo33eZtrq2N0YrU3H."
+            reserved: true
+            description: "Demo kibanaserver user"
+          kibanaro:
+            hash: "$2a$12$JJSXNfTowz7Uu5ttXfeYpeYE0arACvcwlPBStB1F.MI7f0U9Z4DGC"
+            reserved: false
+            backend_roles:
+            - "kibanauser"
+            - "readall"
+            attributes:
+              attribute1: "value1"
+              attribute2: "value2"
+              attribute3: "value3"
+            description: "Demo kibanaro user"
+          logstash:
+            hash: "$2a$12$u1ShR4l4uBS3Uv59Pa2y5.1uQuZBrZtmNfqB3iM/.jL0XoV9sghS2"
+            reserved: false
+            backend_roles:
+            - "logstash"
+            description: "Demo logstash user"
+          readall:
+            hash: "$2a$12$ae4ycwzwvLtZxwZ82RmiEunBbIPiAmGZduBAjKN0TXdwQFtCwARz2"
+            reserved: false
+            backend_roles:
+            - "readall"
+            description: "Demo readall user"
+          snapshotrestore:
+            hash: "$2y$12$DpwmetHKwgYnorbgdvORCenv4NAK8cPUg8AI6pxLCuWf/ALc0.v7W"
+            reserved: false
+            backend_roles:
+            - "snapshotrestore"
+            description: "Demo snapshotrestore user"
+
+        roles.yml: |-
+          _meta:
+            type: "roles"
+            config_version: 2
+
+          kibana_read_only:
+            reserved: true
+
+          security_rest_api_access:
+            reserved: true
+
+          alerting_view_alerts:
+            reserved: true
+            index_permissions:
+              - index_patterns:
+                - ".opendistro-alerting-alert*"
+                allowed_actions:
+                  - read
+
+          alerting_crud_alerts:
+            reserved: true
+            index_permissions:
+              - index_patterns:
+                - ".opendistro-alerting-alert*"
+                allowed_actions:
+                - crud
+
+          alerting_full_access:
+            reserved: true
+            index_permissions:
+              - index_patterns:
+                - ".opendistro-alerting-config"
+                - ".opendistro-alerting-alert*"
+                allowed_actions:
+                  - crud
+        rolesMapping.yml: |-
+          _meta:
+            type: "rolesmapping"
+            config_version: 2
+          all_access:
+            reserved: false
+            backend_roles:
+            - "admin"
+            description: "Maps admin to all_access"
+          own_index:
+            reserved: false
+            users:
+            - "*"
+            description: "Allow full access to an index named like the username"
+          logstash:
+            reserved: false
+            backend_roles:
+            - "logstash"
+          kibana_user:
+            reserved: false
+            backend_roles:
+            - "kibanauser"
+            description: "Maps kibanauser to kibana_user"
+          readall:
+            reserved: false
+            backend_roles:
+            - "readall"
+          manage_snapshots:
+            reserved: false
+            backend_roles:
+            - "snapshotrestore"
+          kibana_server:
+            reserved: true
+            users:
+            - "kibanaserver"
+
+        tenants.yml: |-
 
   extraEnvs: []
 
@@ -204,11 +470,11 @@ elasticsearch:
       existingCertSecretKeySubPath: tls.key
       existingCertSecretRootCASubPath: ca.crt
     rest:
-      enabled: true
-      existingCertSecret: opendistro-client-cert
-      existingCertSecretCertSubPath: tls.crt
-      existingCertSecretKeySubPath: tls.key
-      existingCertSecretRootCASubPath: ca.crt
+      enabled: false
+      # existingCertSecret: opendistro-client-cert
+      # existingCertSecretCertSubPath: tls.crt
+      # existingCertSecretKeySubPath: tls.key
+      # existingCertSecretRootCASubPath: ca.crt
     admin:
       enabled: true
       existingCertSecret: opendistro-server-cert
@@ -282,7 +548,7 @@ elasticsearch:
 
   data:
     enabled: true
-    replicas: 2
+    replicas: 3
     updateStrategy: "RollingUpdate"
 
     ## Enable persistence using Persistent Volume Claims
@@ -321,7 +587,7 @@ elasticsearch:
     #  requests:
     #    cpu: 200m
     #    memory: 1024Mi
-    javaOpts: "-Xms2048m -Xmx2048m"
+    javaOpts: "-Xms4g -Xmx4g"
     podDisruptionBudget:
       enabled: true
       minAvailable: 1
@@ -349,22 +615,23 @@ elasticsearch:
   client:
     enabled: true
     service:
-      type: ClusterIP
-      annotations: {}
+      type: LoadBalancer
+      externalUrl: es-client-dev.cxa.secops.pw
+      annotations:
         # # Defined ELB backend protocol as HTTPS to allow connection to Elasticsearch API
-        # service.beta.kubernetes.io/aws-load-balancer-backend-protocol: https
+        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 
         # # ARN of ACM certificate registered to the deployed ELB for handling connections over TLS
         # # ACM certificate should be issued to the DNS hostname defined earlier (elk.sec.example.com)
         # service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-east-1:111222333444:certificate/c69f6022-b24f-43d9-b9c8-dfe288d9443d"
         # service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
 
-        # service.beta.kubernetes.io/aws-load-balancer-connection-draining-enabled: "true"
-        # service.beta.kubernetes.io/aws-load-balancer-connection-draining-timeout: "60"
-        # service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+        service.beta.kubernetes.io/aws-load-balancer-connection-draining-enabled: "true"
+        service.beta.kubernetes.io/aws-load-balancer-connection-draining-timeout: "60"
+        service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
 
         # # Annotation to create internal only ELB
-        # service.beta.kubernetes.io/aws-load-balancer-internal: 0.0.0.0/0
+        service.beta.kubernetes.io/aws-load-balancer-internal: 0.0.0.0/0
     replicas: 2
     javaOpts: "-Xms2048m -Xmx2048m"
     ingress:
@@ -459,10 +726,10 @@ elasticsearch:
     opendistro_security.ssl.transport.resolve_hostname: false
 
     # # TLS Configuration REST Layer
-    opendistro_security.ssl.http.enabled: true
-    opendistro_security.ssl.http.pemcert_filepath: elk-rest-crt.pem
-    opendistro_security.ssl.http.pemkey_filepath: elk-rest-key.pem
-    opendistro_security.ssl.http.pemtrustedcas_filepath: elk-rest-root-ca.pem
+    opendistro_security.ssl.http.enabled: false
+    # opendistro_security.ssl.http.pemcert_filepath: elk-rest-crt.pem
+    # opendistro_security.ssl.http.pemkey_filepath: elk-rest-key.pem
+    # opendistro_security.ssl.http.pemtrustedcas_filepath: elk-rest-root-ca.pem
     opendistro_security.nodes_dn:
     - 'CN=Opendistro Node And Client Certificate'
     - 'CN=Opendistro Admin Certificate'

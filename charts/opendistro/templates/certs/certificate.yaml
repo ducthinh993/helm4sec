@@ -63,6 +63,9 @@ spec:
   - {{ template "opendistro-es.fullname" . }}-client-service.{{ .Release.Namespace }}.svc.cluster.local
   {{ end }}
   - {{ template "opendistro-es.fullname" . }}-discovery.{{ .Release.Namespace }}.svc.cluster.local
+  {{- if .Values.elasticsearch.client.service.externalUrl }}
+  - {{ .Values.elasticsearch.client.service.externalUrl }}
+  {{ end }}
   issuerRef:
     name: {{ .Values.certmanager.certPrefix }}-ca-issuer
     kind: Issuer
